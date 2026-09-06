@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Blanket deny for all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User-isolated collections
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /reflections/{reflectionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /mood_logs/{logId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /monthly_plans/{planId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /habits/{habitId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /bucket_list/{itemId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /{subcollection=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}

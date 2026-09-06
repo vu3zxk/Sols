@@ -1,0 +1,12 @@
+{
+  "projectId": "personal-gemini-journal-01",
+  "appId": "1:723583873143:web:61359c158c789913ee9672",
+  "apiKey": "AIzaSyCVpGUsYMNzGDWUjK0cS9vzUtQO9xMqPzA",
+  "authDomain": "personal-gemini-journal-01.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-geminireflect-ea6bca17-7ae0-47b3-b02c-5495b212f8a6",
+  "storageBucket": "personal-gemini-journal-01.firebasestorage.app",
+  "messagingSenderId": "723583873143",
+  "measurementId": "",
+  "oAuthClientId": "723583873143-qtubfsat8q7231jlgmvttdliln7i0b0v.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

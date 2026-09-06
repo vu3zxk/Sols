@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "UserReflection": {
+      "title": "User Reflection",
+      "description": "User-authored journal reflection entry with multi-turn Gemini dialogue, AI summary, and geolocation.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique identifier of the owner."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the reflection."
+        },
+        "initialContent": {
+          "type": "string",
+          "description": "Primary journal thought or prompt."
+        },
+        "messages": {
+          "type": "array",
+          "description": "Multi-turn dialogue messages with Gemini."
+        },
+        "aiSummary": {
+          "type": "string",
+          "description": "AI-generated synthesis and key insights."
+        },
+        "tags": {
+          "type": "array",
+          "description": "List of topic tags extracted from the reflection."
+        },
+        "mode": {
+          "type": "string",
+          "description": "Reflection mode (reflect, brainstorm, summary, counsel)."
+        },
+        "geoLocation": {
+          "type": "object",
+          "description": "Optional geolocation coordinates and label when entry was written."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation ISO timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated ISO timestamp."
+        }
+      },
+      "required": ["userId", "title", "createdAt", "updatedAt"]
+    },
+    "MoodLog": {
+      "title": "Mood Log",
+      "description": "Daily Sol mood recording with score, mood descriptor, notes, and geo-tag.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique identifier of the user." },
+        "date": { "type": "string", "description": "Date of the mood log in YYYY-MM-DD." },
+        "mood": { "type": "string", "description": "Mood category (great, good, centered, low, down)." },
+        "score": { "type": "number", "description": "Numeric mood valence (1 to 5)." },
+        "energy": { "type": "number", "description": "Energy level (1 to 5)." },
+        "note": { "type": "string", "description": "Optional reflection note." },
+        "geoLocation": { "type": "object", "description": "Optional location coordinates." },
+        "createdAt": { "type": "string", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "description": "Update timestamp." }
+      },
+      "required": ["userId", "date", "mood", "score", "createdAt"]
+    },
+    "MonthlyPlan": {
+      "title": "Monthly Plan",
+      "description": "Monthly goals converted to actionable todos and month-end progress review.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique identifier of the user." },
+        "monthKey": { "type": "string", "description": "Year-Month key, e.g. 2026-09." },
+        "plansRaw": { "type": "string", "description": "Initial text entered by user for monthly goals." },
+        "todos": { "type": "array", "description": "List of converted actionable todos with completion status." },
+        "endOfMonthReview": { "type": "string", "description": "End of month AI comparison and user reflection." },
+        "createdAt": { "type": "string", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "description": "Update timestamp." }
+      },
+      "required": ["userId", "monthKey", "createdAt"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "Daily or weekly habit tracked for consistency with streak count.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "name": { "type": "string", "description": "Name of the habit." },
+        "category": { "type": "string", "description": "Habit category (wellness, focus, fitness, learning)." },
+        "completedDates": { "type": "array", "description": "Array of completed date strings YYYY-MM-DD." },
+        "createdAt": { "type": "string", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "description": "Update timestamp." }
+      },
+      "required": ["userId", "name", "createdAt"]
+    },
+    "BucketItem": {
+      "title": "Bucket List Item",
+      "description": "Aspiration or life milestone item.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "title": { "type": "string", "description": "Title of the bucket list item." },
+        "description": { "type": "string", "description": "Detailed description or inspiration." },
+        "category": { "type": "string", "description": "Category (adventure, creativity, travel, career, personal)." },
+        "targetDate": { "type": "string", "description": "Target date or milestone season." },
+        "completed": { "type": "boolean", "description": "Whether the bucket list item is achieved." },
+        "completedAt": { "type": "string", "description": "Timestamp when completed." },
+        "createdAt": { "type": "string", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "description": "Update timestamp." }
+      },
+      "required": ["userId", "title", "createdAt"]
+    },
+    "UserSettings": {
+      "title": "User Settings",
+      "description": "User preferences for notifications and theme.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "theme": { "type": "string", "description": "Theme choice (light or dark)." },
+        "dailyReminderEnabled": { "type": "boolean", "description": "Whether daily journaling reminder is enabled." },
+        "dailyReminderTime": { "type": "string", "description": "Preferred reminder time, e.g. 20:00." },
+        "eveningCheckinEnabled": { "type": "boolean", "description": "Whether evening mood checkin prompt is enabled." },
+        "updatedAt": { "type": "string", "description": "Update timestamp." }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/reflections/{reflectionId}": {
+      "schema": "UserReflection",
+      "description": "User-isolated reflections collection."
+    },
+    "/users/{userId}/mood_logs/{logId}": {
+      "schema": "MoodLog",
+      "description": "User-isolated daily mood logs."
+    },
+    "/users/{userId}/monthly_plans/{planId}": {
+      "schema": "MonthlyPlan",
+      "description": "User-isolated monthly goals and to-do lists."
+    },
+    "/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "User-isolated habit tracking items."
+    },
+    "/users/{userId}/bucket_list/{itemId}": {
+      "schema": "BucketItem",
+      "description": "User-isolated bucket list aspirations."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "UserSettings",
+      "description": "User-isolated preferences."
+    }
+  }
+}

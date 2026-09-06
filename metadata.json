@@ -1,0 +1,7 @@
+{
+  "name": "Sols",
+  "description": "Sols - Reflective journal, daily mood tracking, and mindful AI dialogue powered by Gemini and Firestore.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
