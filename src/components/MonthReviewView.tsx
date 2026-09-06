@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MoodLog, UserReflection } from '../types';
 import { generateMonthReview } from '../lib/geminiApi';
+import { getReadableLocationName } from '../lib/geo';
+import { formatLocalDateKey, getTodayLocalDateKey } from '../lib/dateUtils';
 import { 
   BarChart3, 
   Sparkles, 
@@ -11,7 +13,10 @@ import {
   BookOpen, 
   ArrowUpRight,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Layers
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -24,15 +29,50 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
   moodLogs,
   reflections,
 }) => {
-  const currentDate = new Date();
-  const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthKey = getTodayLocalDateKey().slice(0, 7);
+
+  // Helper to extract YYYY-MM-DD based on local date
+  const getLocalDateKey = (isoOrDateStr: string): string => {
+    return formatLocalDateKey(isoOrDateStr);
+  };
+
+  const getMonthKey = (isoOrDateStr: string): string => {
+    return formatLocalDateKey(isoOrDateStr).slice(0, 7);
+  };
+
+  // Collect all months that have any mood logs or journal reflections
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    monthSet.add(currentMonthKey);
+    moodLogs.forEach((m) => monthSet.add(getMonthKey(m.date)));
+    reflections.forEach((r) => monthSet.add(getMonthKey(r.createdAt)));
+    return Array.from(monthSet).filter(Boolean).sort().reverse();
+  }, [moodLogs, reflections, currentMonthKey]);
+
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
   const [aiReview, setAiReview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Filter logs for selected month (YYYY-MM)
-  const monthLogs = moodLogs.filter((m) => m.date.startsWith(selectedMonth));
-  const monthReflections = reflections.filter((r) => r.createdAt.startsWith(selectedMonth));
+  // Filter logs and reflections based on selectedMonth ('all' or 'YYYY-MM')
+  const isAllTime = selectedMonth === 'all';
+
+  const monthLogs = useMemo(() => {
+    if (isAllTime) return moodLogs;
+    return moodLogs.filter((m) => getMonthKey(m.date) === selectedMonth);
+  }, [moodLogs, selectedMonth, isAllTime]);
+
+  const monthReflections = useMemo(() => {
+    if (isAllTime) return reflections;
+    return reflections.filter((r) => getMonthKey(r.createdAt) === selectedMonth);
+  }, [reflections, selectedMonth, isAllTime]);
+
+  // Calculate distinct Sols tracked (unique days with either a mood log or reflection)
+  const uniqueActiveSols = useMemo(() => {
+    const solSet = new Set<string>();
+    monthLogs.forEach((m) => solSet.add(getLocalDateKey(m.date)));
+    monthReflections.forEach((r) => solSet.add(getLocalDateKey(r.createdAt)));
+    return solSet;
+  }, [monthLogs, monthReflections]);
 
   // Identify highest and lowest days
   let highestDay: MoodLog | null = null;
@@ -46,10 +86,10 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
 
   // Find reflection on highest and lowest days
   const highestReflection = highestDay
-    ? monthReflections.find((r) => r.createdAt.slice(0, 10) === highestDay?.date)
+    ? monthReflections.find((r) => getLocalDateKey(r.createdAt) === getLocalDateKey(highestDay?.date || ''))
     : null;
   const lowestReflection = lowestDay
-    ? monthReflections.find((r) => r.createdAt.slice(0, 10) === lowestDay?.date)
+    ? monthReflections.find((r) => getLocalDateKey(r.createdAt) === getLocalDateKey(lowestDay?.date || ''))
     : null;
 
   // Average score
@@ -57,16 +97,40 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
     ? (monthLogs.reduce((acc, l) => acc + l.score, 0) / monthLogs.length).toFixed(1)
     : '0';
 
-  const monthLabel = new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
+  const formatMonthLabel = (mKey: string) => {
+    if (mKey === 'all') return 'All Sols (All Time)';
+    try {
+      const [y, m] = mKey.split('-');
+      const d = new Date(Number(y), Number(m) - 1, 1);
+      return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    } catch {
+      return mKey;
+    }
+  };
+
+  const monthLabel = formatMonthLabel(selectedMonth);
+
+  // Month navigation helpers
+  const currentIdx = availableMonths.indexOf(selectedMonth);
+  const handlePrevMonth = () => {
+    if (currentIdx < availableMonths.length - 1) {
+      setSelectedMonth(availableMonths[currentIdx + 1]);
+    }
+  };
+  const handleNextMonth = () => {
+    if (currentIdx > 0) {
+      setSelectedMonth(availableMonths[currentIdx - 1]);
+    }
+  };
+
+  // Check if user has other entries in other months
+  const otherMonthsCount = reflections.length - monthReflections.length;
 
   const handleGenerateReview = async () => {
     setIsGenerating(true);
     try {
-      const journalHighlights = monthReflections.slice(0, 5).map((r) => ({
-        date: r.createdAt.slice(0, 10),
+      const journalHighlights = monthReflections.slice(0, 8).map((r) => ({
+        date: getLocalDateKey(r.createdAt),
         title: r.title,
         snippet: r.initialContent.slice(0, 200),
       }));
@@ -78,7 +142,7 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
         avgMood: Number(avgScore),
         totalMoodLogs: monthLogs.length,
         journalHighlights,
-        initialGoals: "Mindful consistency, grounded self-awareness, and emotional balance.",
+        initialGoals: "Mindful consistency, emotional balance, intentional presence, and holistic personal growth.",
         todosCompleted: 0,
         todosTotal: 0,
       });
@@ -105,7 +169,7 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
               Month-End Review
             </h1>
             <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-              Reflect upon your emotional arc: understand where you felt the highest and the lowest, and distill lasting wisdom.
+              Reflect upon your emotional arc: explore highest and lowest moments, track all active Sols, and synthesize wisdom.
             </p>
           </div>
 
@@ -113,13 +177,94 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
             type="button"
             id="generate-month-review-btn"
             onClick={handleGenerateReview}
-            disabled={isGenerating || monthLogs.length === 0}
+            disabled={isGenerating || (monthLogs.length === 0 && monthReflections.length === 0)}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-stone-900 dark:bg-amber-400 text-white dark:text-stone-950 rounded-xl text-xs font-semibold hover:bg-stone-800 dark:hover:bg-amber-300 transition-colors shadow-2xs disabled:opacity-50 self-start sm:self-center"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 dark:text-stone-950" />
-            <span>{isGenerating ? "Synthesizing..." : "Generate AI Month Review"}</span>
+            <span>{isGenerating ? "Synthesizing..." : "Generate AI Retrospective"}</span>
           </button>
         </div>
+
+        {/* Month Selector Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-xs font-semibold text-stone-600 dark:text-stone-300">
+              Review Period:
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                disabled={currentIdx >= availableMonths.length - 1 || isAllTime}
+                className="p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 transition"
+                title="Older Month"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-white bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+              >
+                <option value="all">All Sols (Complete Journey)</option>
+                {availableMonths.map((mKey) => (
+                  <option key={mKey} value={mKey}>
+                    {formatMonthLabel(mKey)} {mKey === currentMonthKey ? ' (Current)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                disabled={currentIdx <= 0 || isAllTime}
+                className="p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 transition"
+                title="Newer Month"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isAllTime && (
+              <button
+                type="button"
+                onClick={() => setSelectedMonth('all')}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950/60 dark:hover:text-amber-300 transition"
+              >
+                View All Sols
+              </button>
+            )}
+            {isAllTime && (
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(currentMonthKey)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 transition"
+              >
+                Switch to Current Month
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Helpful context notice if user has reflections in other months */}
+        {!isAllTime && otherMonthsCount > 0 && (
+          <div className="p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between gap-2 text-xs">
+            <span className="text-amber-800 dark:text-amber-300">
+              Showing <strong>{monthLabel}</strong> ({uniqueActiveSols.size} active Sols, {monthReflections.length} journal entries). You have <strong>{otherMonthsCount}</strong> entries in previous months.
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedMonth('all')}
+              className="text-xs font-bold text-amber-900 dark:text-amber-200 underline shrink-0 hover:text-amber-700"
+            >
+              See All
+            </button>
+          </div>
+        )}
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -128,10 +273,10 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
               Sols Tracked
             </span>
             <p className="text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
-              {monthLogs.length}
+              {uniqueActiveSols.size}
             </p>
             <span className="text-xs text-stone-500 dark:text-stone-400">
-              Daily check-ins this month
+              {monthLogs.length} mood logs • {monthReflections.length} reflections
             </span>
           </div>
 
@@ -196,11 +341,11 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
                       day: 'numeric',
                     })}
                   </span>
-                  {highestDay.geoLocation?.cityOrRegion && (
+                  {getReadableLocationName(highestDay.geoLocation) && (
                     <>
                       <span>•</span>
                       <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                      <span>{highestDay.geoLocation.cityOrRegion}</span>
+                      <span>{getReadableLocationName(highestDay.geoLocation)}</span>
                     </>
                   )}
                 </div>
@@ -227,7 +372,7 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
               </div>
             ) : (
               <p className="text-xs text-stone-400 dark:text-stone-500 py-6 text-center">
-                No mood data logged for {monthLabel} yet.
+                No mood check-ins recorded for {monthLabel}.
               </p>
             )}
           </div>
@@ -266,11 +411,11 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
                       day: 'numeric',
                     })}
                   </span>
-                  {lowestDay.geoLocation?.cityOrRegion && (
+                  {getReadableLocationName(lowestDay.geoLocation) && (
                     <>
                       <span>•</span>
                       <MapPin className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>{lowestDay.geoLocation.cityOrRegion}</span>
+                      <span>{getReadableLocationName(lowestDay.geoLocation)}</span>
                     </>
                   )}
                 </div>
@@ -321,3 +466,4 @@ export const MonthReviewView: React.FC<MonthReviewViewProps> = ({
     </div>
   );
 };
+

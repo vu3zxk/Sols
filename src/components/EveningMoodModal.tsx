@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MoodCategory, MoodLog, GeoLocationInfo } from '../types';
-import { getCurrentGeoLocation } from '../lib/geo';
-import { Sparkles, MapPin, X, Heart, SunMedium, CloudSun, Cloud, CloudRain, AlertTriangle } from 'lucide-react';
+import { getCurrentGeoLocation, getReadableLocationName } from '../lib/geo';
+import { getTodayLocalDateKey, formatLocalDateKey, formatReadableDate } from '../lib/dateUtils';
+import { Sparkles, MapPin, X, Heart, SunMedium, CloudSun, Cloud, CloudRain, AlertTriangle, Calendar, Trash2 } from 'lucide-react';
 
 interface EveningMoodModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveMood: (moodData: Omit<MoodLog, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onDeleteMood?: (moodId: string) => Promise<void>;
+  targetDate?: string;
   existingTodayMood?: MoodLog | null;
   isEveningPrompt?: boolean;
 }
@@ -31,20 +34,37 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
   isOpen,
   onClose,
   onSaveMood,
+  onDeleteMood,
+  targetDate,
   existingTodayMood,
   isEveningPrompt = false,
 }) => {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const effectiveDate = targetDate ? formatLocalDateKey(targetDate) : getTodayLocalDateKey();
+  const [selectedDate, setSelectedDate] = useState<string>(effectiveDate);
   const [selectedCategory, setSelectedCategory] = useState<MoodCategory>(
     existingTodayMood?.mood || 'centered'
   );
   const [energy, setEnergy] = useState<number>(existingTodayMood?.energy || 3);
   const [note, setNote] = useState<string>(existingTodayMood?.note || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [geoTag, setGeoTag] = useState<GeoLocationInfo | undefined>(existingTodayMood?.geoLocation);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
+  // Sync state whenever modal opens or target/existing mood changes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedDate(effectiveDate);
+      setSelectedCategory(existingTodayMood?.mood || 'centered');
+      setEnergy(existingTodayMood?.energy || 3);
+      setNote(existingTodayMood?.note || '');
+      setGeoTag(existingTodayMood?.geoLocation);
+    }
+  }, [isOpen, effectiveDate, existingTodayMood]);
+
   if (!isOpen) return null;
+
+  const isToday = selectedDate === getTodayLocalDateKey();
 
   const handleFetchLocation = async () => {
     setIsGettingLocation(true);
@@ -66,8 +86,9 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
       const foundOption = MOOD_OPTIONS.find((o) => o.category === selectedCategory);
       const score = foundOption ? foundOption.score : 3;
 
+      // Always save using the strictly local date key (YYYY-MM-DD)
       await onSaveMood({
-        date: todayStr,
+        date: selectedDate,
         mood: selectedCategory,
         score,
         energy,
@@ -79,6 +100,21 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
       console.error("Failed to save mood:", err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!existingTodayMood?.id || !onDeleteMood) return;
+    if (window.confirm("Are you sure you want to remove this mood check-in?")) {
+      setIsDeleting(true);
+      try {
+        await onDeleteMood(existingTodayMood.id);
+        onClose();
+      } catch (err) {
+        console.error("Failed to delete mood:", err);
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -101,12 +137,24 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
         </button>
 
         <div className="mb-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isEveningPrompt ? "Evening Sol Reflection" : "Daily Mood Check-In"}</span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isEveningPrompt ? "Evening Sol Reflection" : "Daily Mood Check-In"}</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+              <Calendar className="w-3 h-3 text-amber-600" />
+              <span>{formatReadableDate(selectedDate)}</span>
+              {isToday && (
+                <span className="ml-1 px-1.5 py-0.2 bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded text-[9px] uppercase font-bold">
+                  Today
+                </span>
+              )}
+            </div>
           </div>
+
           <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-white tracking-tight">
-            How are you feeling today?
+            {isToday ? "How are you feeling today?" : `How were you feeling on ${formatReadableDate(selectedDate)}?`}
           </h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
             Capture your internal Sol climate. A quick moment of honesty shapes mindful self-awareness.
@@ -195,8 +243,8 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
             <div className="flex items-center gap-2 text-stone-600 dark:text-stone-300">
               <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                {geoTag?.cityOrRegion 
-                  ? `Geo-tagged: ${geoTag.cityOrRegion}` 
+                {getReadableLocationName(geoTag) 
+                  ? `Geo-tagged: ${getReadableLocationName(geoTag)}` 
                   : "Include current location tag"}
               </span>
             </div>
@@ -213,21 +261,37 @@ export const EveningMoodModal: React.FC<EveningMoodModalProps> = ({
           </div>
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
-            >
-              Skip for now
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-6 py-2.5 bg-stone-900 dark:bg-amber-400 text-white dark:text-stone-950 rounded-xl text-xs font-semibold hover:bg-stone-800 dark:hover:bg-amber-300 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {isSaving ? "Saving Sol..." : "Save Today's Mood"}
-            </button>
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <div>
+              {existingTodayMood && onDeleteMood && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isDeleting ? "Removing..." : "Delete Check-in"}</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-medium text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-stone-900 dark:bg-amber-400 text-white dark:text-stone-950 rounded-xl text-xs font-semibold hover:bg-stone-800 dark:hover:bg-amber-300 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isSaving ? "Saving Sol..." : existingTodayMood ? "Update Mood" : "Save Mood"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

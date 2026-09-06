@@ -1,29 +1,64 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MoodLog } from '../types';
-import { TrendingUp, TrendingDown, Minus, SunMedium, CloudSun, Cloud, CloudRain, AlertTriangle, Calendar } from 'lucide-react';
+import { getTodayLocalDateKey, formatLocalDateKey } from '../lib/dateUtils';
+import { TrendingUp, TrendingDown, Minus, SunMedium, CloudSun, Cloud, CloudRain, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface WeeklyMoodTrendProps {
   moodLogs: MoodLog[];
-  onOpenCheckIn?: () => void;
+  onOpenCheckIn?: (dateStr?: string) => void;
 }
 
 export const WeeklyMoodTrend: React.FC<WeeklyMoodTrendProps> = ({ moodLogs, onOpenCheckIn }) => {
-  // Generate last 7 days (today down to 6 days ago)
-  const today = new Date();
-  const last7Days: { dateStr: string; dayLabel: string; shortDate: string; log?: MoodLog }[] = [];
+  const [weekOffset, setWeekOffset] = useState<number>(0);
 
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const dayLabel = d.toLocaleDateString(undefined, { weekday: 'short' });
+  // Current date reference in local time
+  const now = new Date();
+  const todayKey = getTodayLocalDateKey();
+
+  // Compute Sunday of the target week
+  const currentDayOfWeek = now.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+  const baseSunday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - currentDayOfWeek + (weekOffset * 7),
+    12, 0, 0
+  );
+
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekDays: {
+    dateStr: string;
+    dayLabel: string;
+    shortDate: string;
+    isToday: boolean;
+    log?: MoodLog;
+  }[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(baseSunday);
+    d.setDate(baseSunday.getDate() + i);
+    const dateStr = formatLocalDateKey(d);
+    const dayLabel = DAY_LABELS[i];
     const shortDate = `${d.getMonth() + 1}/${d.getDate()}`;
-    const log = moodLogs.find((m) => m.date === dateStr);
-    last7Days.push({ dateStr, dayLabel, shortDate, log });
+    const isToday = dateStr === todayKey;
+    const log = moodLogs.find((m) => formatLocalDateKey(m.date) === dateStr);
+
+    weekDays.push({
+      dateStr,
+      dayLabel,
+      shortDate,
+      isToday,
+      log,
+    });
   }
 
+  // Calculate week interval label
+  const sundayDate = new Date(baseSunday);
+  const saturdayDate = new Date(baseSunday);
+  saturdayDate.setDate(baseSunday.getDate() + 6);
+  const weekRangeLabel = `${sundayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${saturdayDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+
   // Calculate average score for days that have logs
-  const loggedDays = last7Days.filter((d) => d.log !== undefined);
+  const loggedDays = weekDays.filter((d) => d.log !== undefined);
   const avgScore = loggedDays.length > 0
     ? (loggedDays.reduce((acc, curr) => acc + (curr.log?.score || 3), 0) / loggedDays.length).toFixed(1)
     : null;
@@ -55,7 +90,7 @@ export const WeeklyMoodTrend: React.FC<WeeklyMoodTrendProps> = ({ moodLogs, onOp
 
   return (
     <div className="bg-white dark:bg-stone-900 rounded-3xl p-5 sm:p-6 border border-stone-200 dark:border-stone-800 shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -72,46 +107,80 @@ export const WeeklyMoodTrend: React.FC<WeeklyMoodTrendProps> = ({ moodLogs, onOp
           </h3>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          {trendDirection === 'up' && (
-            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>Trending Upward</span>
+        {/* Controls & Trend */}
+        <div className="flex items-center gap-3">
+          {/* Week interval navigator */}
+          <div className="flex items-center gap-1 bg-stone-50 dark:bg-stone-800/80 p-1 rounded-xl border border-stone-200 dark:border-stone-700">
+            <button
+              type="button"
+              onClick={() => setWeekOffset((prev) => prev - 1)}
+              className="p-1 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white rounded-md transition hover:bg-stone-200/50"
+              title="Previous Week"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[11px] font-medium px-1.5 text-stone-700 dark:text-stone-300 whitespace-nowrap">
+              {weekRangeLabel}
             </span>
-          )}
-          {trendDirection === 'down' && (
-            <span className="inline-flex items-center gap-1 text-indigo-500 dark:text-indigo-400 font-medium">
-              <TrendingDown className="w-3.5 h-3.5" />
-              <span>Lower Valence</span>
-            </span>
-          )}
-          {trendDirection === 'steady' && (
-            <span className="inline-flex items-center gap-1 text-stone-500 dark:text-stone-400 font-medium">
-              <Minus className="w-3.5 h-3.5" />
-              <span>Balanced Cycle</span>
-            </span>
-          )}
+            <button
+              type="button"
+              onClick={() => setWeekOffset((prev) => prev + 1)}
+              className="p-1 text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white rounded-md transition hover:bg-stone-200/50"
+              title="Next Week"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            {weekOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => setWeekOffset(0)}
+                className="text-[10px] font-semibold px-2 py-0.5 ml-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 transition"
+              >
+                Current
+              </button>
+            )}
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            {trendDirection === 'up' && (
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Trending Up</span>
+              </span>
+            )}
+            {trendDirection === 'down' && (
+              <span className="inline-flex items-center gap-1 text-indigo-500 dark:text-indigo-400 font-medium">
+                <TrendingDown className="w-3.5 h-3.5" />
+                <span>Lower Valence</span>
+              </span>
+            )}
+            {trendDirection === 'steady' && (
+              <span className="inline-flex items-center gap-1 text-stone-500 dark:text-stone-400 font-medium">
+                <Minus className="w-3.5 h-3.5" />
+                <span>Balanced</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Visual 7-day grid */}
+      {/* Visual 7-day grid starting with Sun, Mon, Tue, Wed, Thu, Fri, Sat */}
       <div className="grid grid-cols-7 gap-1.5 sm:gap-3">
-        {last7Days.map((day, idx) => {
+        {weekDays.map((day) => {
           const hasLog = Boolean(day.log);
           const score = day.log?.score || 0;
           const Icon = getMoodIcon(score);
-          const isToday = idx === 6;
 
           return (
             <div
               key={day.dateStr}
               className={`flex flex-col items-center p-2 sm:p-3 rounded-2xl border transition-all text-center ${
-                isToday
-                  ? 'border-stone-400 dark:border-stone-600 bg-stone-50/70 dark:bg-stone-800/50'
+                day.isToday
+                  ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/20 bg-amber-50/20 dark:bg-amber-950/10'
                   : 'border-stone-100 dark:border-stone-800/60 bg-white dark:bg-stone-900/40'
               }`}
             >
-              <span className="text-[10px] sm:text-xs font-semibold text-stone-500 dark:text-stone-400">
+              <span className={`text-[10px] sm:text-xs font-semibold ${day.isToday ? 'text-amber-600 dark:text-amber-400' : 'text-stone-500 dark:text-stone-400'}`}>
                 {day.dayLabel}
               </span>
               <span className="text-[9px] text-stone-400 dark:text-stone-500 mb-2">
@@ -119,18 +188,20 @@ export const WeeklyMoodTrend: React.FC<WeeklyMoodTrendProps> = ({ moodLogs, onOp
               </span>
 
               {hasLog ? (
-                <div 
-                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border ${getMoodColor(score)} transition-transform hover:scale-110`}
-                  title={`${day.log?.mood.toUpperCase()} (Score: ${score}/5)${day.log?.note ? ` - "${day.log.note}"` : ''}`}
+                <button 
+                  type="button"
+                  onClick={() => onOpenCheckIn?.(day.dateStr)}
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center border ${getMoodColor(score)} transition-transform hover:scale-110 cursor-pointer`}
+                  title={`${day.log?.mood.toUpperCase()} (Score: ${score}/5)${day.log?.note ? ` - "${day.log.note}"` : ''} • Click to view or edit`}
                 >
                   <Icon className="w-5 h-5" />
-                </div>
+                </button>
               ) : (
                 <button
                   type="button"
-                  onClick={onOpenCheckIn}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-dashed border-stone-300 dark:border-stone-700 flex items-center justify-center text-stone-300 dark:text-stone-600 hover:border-amber-400 hover:text-amber-500 transition-colors"
-                  title="No entry - click to check in"
+                  onClick={() => onOpenCheckIn?.(day.dateStr)}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-dashed border-stone-300 dark:border-stone-700 flex items-center justify-center text-stone-300 dark:text-stone-600 hover:border-amber-400 hover:text-amber-500 transition-colors cursor-pointer"
+                  title={`Log mood for ${day.dayLabel}, ${day.shortDate}`}
                 >
                   <span className="text-xs">+</span>
                 </button>
@@ -146,3 +217,4 @@ export const WeeklyMoodTrend: React.FC<WeeklyMoodTrendProps> = ({ moodLogs, onOp
     </div>
   );
 };
+

@@ -14,7 +14,7 @@ import Markdown from 'react-markdown';
 import { UserReflection, ChatMessage, SaveState } from '../types';
 import { MessageItem } from './MessageItem';
 import { askGeminiReflection, askGeminiSummary } from '../lib/geminiApi';
-import { getCurrentGeoLocation } from '../lib/geo';
+import { getCurrentGeoLocation, getReadableLocationName } from '../lib/geo';
 
 interface ReflectionEditorProps {
   reflection: UserReflection;
@@ -236,10 +236,10 @@ export const ReflectionEditor: React.FC<ReflectionEditorProps> = ({
           />
           <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-stone-500 dark:text-stone-400 mt-1">
             <span>Created {new Date(reflection.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-            {reflection.geoLocation?.cityOrRegion && (
+            {getReadableLocationName(reflection.geoLocation) && (
               <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
                 <MapPin className="w-3 h-3 text-amber-500" />
-                <span>{reflection.geoLocation.cityOrRegion}</span>
+                <span>{getReadableLocationName(reflection.geoLocation)}</span>
               </span>
             )}
           </div>

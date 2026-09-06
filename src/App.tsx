@@ -24,6 +24,7 @@ import {
   subscribeToUserReflections, 
   subscribeToUserMoodLogs, 
   saveUserMoodLog,
+  deleteUserMoodLog,
   subscribeToMonthlyPlan,
   saveMonthlyPlan,
   subscribeToUserHabits,
@@ -35,6 +36,7 @@ import {
   fetchUserSettings,
   saveUserSettings,
 } from './lib/db';
+import { getTodayLocalDateKey, formatLocalDateKey } from './lib/dateUtils';
 import { Sparkles, Sun } from 'lucide-react';
 
 export default function App() {
@@ -66,6 +68,7 @@ export default function App() {
 
   // Evening Mood Check-In Modal
   const [showMoodModal, setShowMoodModal] = useState<boolean>(false);
+  const [moodModalTargetDate, setMoodModalTargetDate] = useState<string | null>(null);
   const [hasPromptedEveningAuto, setHasPromptedEveningAuto] = useState<boolean>(false);
 
   // Apply dark mode class to root HTML element
@@ -164,14 +167,15 @@ export default function App() {
     if (!currentUser?.uid || hasPromptedEveningAuto) return;
 
     const currentHour = new Date().getHours();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const todayMood = moodLogs.find((m) => m.date === todayStr);
+    const todayStr = getTodayLocalDateKey();
+    const todayMood = moodLogs.find((m) => formatLocalDateKey(m.date) === todayStr);
 
     // Evening / End of Day is 6:00 PM (18:00) or later
     const isEvening = currentHour >= 18;
     const eveningPromptEnabled = userSettings?.eveningCheckinEnabled ?? true;
 
     if (isEvening && !todayMood && eveningPromptEnabled) {
+      setMoodModalTargetDate(todayStr);
       setShowMoodModal(true);
       setHasPromptedEveningAuto(true);
     }
@@ -188,10 +192,22 @@ export default function App() {
     }
   }, []);
 
+  // Open mood check in modal for a specific day (or today)
+  const handleOpenMoodCheckIn = (targetDate?: string) => {
+    setMoodModalTargetDate(targetDate || getTodayLocalDateKey());
+    setShowMoodModal(true);
+  };
+
   // Save mood handler
   const handleSaveMood = async (moodData: Omit<MoodLog, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => {
     if (!currentUser?.uid) return;
     await saveUserMoodLog(currentUser.uid, moodData);
+  };
+
+  // Delete mood handler
+  const handleDeleteMood = async (moodId: string) => {
+    if (!currentUser?.uid) return;
+    await deleteUserMoodLog(currentUser.uid, moodId);
   };
 
   // Open journal with prompt
@@ -204,10 +220,12 @@ export default function App() {
   // Toggle habit for today
   const handleToggleHabitToday = async (habit: Habit) => {
     if (!currentUser?.uid) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayKey = getTodayLocalDateKey();
     const dates = habit.completedDates || [];
-    const exists = dates.includes(todayStr);
-    const nextDates = exists ? dates.filter((d) => d !== todayStr) : [...dates, todayStr];
+    const exists = dates.some((d) => formatLocalDateKey(d) === todayKey);
+    const nextDates = exists
+      ? dates.filter((d) => formatLocalDateKey(d) !== todayKey)
+      : [...dates, todayKey];
     await saveUserHabit(currentUser.uid, {
       ...habit,
       completedDates: nextDates,
@@ -252,8 +270,9 @@ export default function App() {
     );
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const existingTodayMood = moodLogs.find((m) => m.date === todayStr);
+  const todayStr = getTodayLocalDateKey();
+  const effectiveModalDate = moodModalTargetDate || todayStr;
+  const existingModalMood = moodLogs.find((m) => formatLocalDateKey(m.date) === effectiveModalDate);
 
   return (
     <div className={`w-screen ${currentUser ? 'h-screen overflow-hidden bg-stone-100 dark:bg-stone-950' : 'min-h-screen overflow-y-auto bg-[#FDFBF7] dark:bg-stone-950'} flex flex-col font-sans text-stone-900 dark:text-stone-100 antialiased selection:bg-amber-100 dark:selection:bg-amber-900/60 selection:text-amber-900 dark:selection:text-amber-200`}>
@@ -281,7 +300,7 @@ export default function App() {
                 setSelectedReflectionId(id);
                 setActiveTab('journal');
               }}
-              onOpenMoodCheckIn={() => setShowMoodModal(true)}
+              onOpenMoodCheckIn={handleOpenMoodCheckIn}
               onToggleHabitToday={handleToggleHabitToday}
               onToggleMonthlyTodo={handleToggleMonthlyTodo}
             />
@@ -357,9 +376,14 @@ export default function App() {
           {/* Evening Mood Modal Prompt */}
           <EveningMoodModal
             isOpen={showMoodModal}
-            onClose={() => setShowMoodModal(false)}
+            onClose={() => {
+              setShowMoodModal(false);
+              setMoodModalTargetDate(null);
+            }}
             onSaveMood={handleSaveMood}
-            existingTodayMood={existingTodayMood}
+            onDeleteMood={handleDeleteMood}
+            targetDate={effectiveModalDate}
+            existingTodayMood={existingModalMood}
             isEveningPrompt={new Date().getHours() >= 18}
           />
         </div>

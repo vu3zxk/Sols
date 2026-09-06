@@ -88,6 +88,7 @@ export interface BucketItem {
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+  isPinned?: boolean;
 }
 
 export interface UserSettings {

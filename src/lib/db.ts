@@ -190,6 +190,12 @@ export async function saveUserMoodLog(
   return id;
 }
 
+export async function deleteUserMoodLog(userId: string, moodLogId: string): Promise<void> {
+  if (!userId || !moodLogId) return;
+  const docRef = doc(db, "users", userId, "mood_logs", moodLogId);
+  await deleteDoc(docRef);
+}
+
 // ==========================================
 // 3. MONTHLY PLANS (/users/{userId}/monthly_plans)
 // ==========================================

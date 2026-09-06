@@ -3,6 +3,7 @@ import { UserReflection, MoodLog, MonthlyPlan, Habit, BucketItem, NavigationTab 
 import { WeeklyMoodTrend } from './WeeklyMoodTrend';
 import { CaringAlert } from './CaringAlert';
 import { JournalStreakBanner } from './JournalStreakBanner';
+import { getTodayLocalDateKey, formatLocalDateKey } from '../lib/dateUtils';
 import { 
   Sparkles, 
   PenLine, 
@@ -26,7 +27,7 @@ interface MainDashboardProps {
   onNavigateTab: (tab: NavigationTab) => void;
   onOpenNewJournal: (initialPrompt?: string) => void;
   onSelectReflection: (reflectionId: string) => void;
-  onOpenMoodCheckIn: () => void;
+  onOpenMoodCheckIn: (targetDate?: string) => void;
   onToggleHabitToday: (habit: Habit) => Promise<void>;
   onToggleMonthlyTodo: (todoId: string) => Promise<void>;
 }
@@ -44,10 +45,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   onToggleHabitToday,
   onToggleMonthlyTodo,
 }) => {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayMood = moodLogs.find((m) => m.date === todayStr);
+  const now = new Date();
+  const todayStr = getTodayLocalDateKey();
+  const todayMood = moodLogs.find((m) => formatLocalDateKey(m.date) === todayStr);
 
-  const formattedDate = new Date().toLocaleDateString(undefined, {
+  const formattedDate = now.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -58,7 +60,10 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   const recentReflections = reflections.slice(0, 3);
 
   // Today's habits completion
-  const completedHabitsToday = habits.filter((h) => (h.completedDates || []).includes(todayStr)).length;
+  const completedHabitsToday = habits.filter((h) => {
+    const dates = h.completedDates || [];
+    return dates.some((d) => formatLocalDateKey(d) === todayStr);
+  }).length;
 
   // Monthly plan progress
   const todos = monthlyPlan?.todos || [];
@@ -79,7 +84,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               <span>Today's Sol • {formattedDate}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white tracking-tight">
-              Mindful Cockpit
+              Be Mindful 
             </h1>
             <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
               Your comprehensive panoramic overview of emotional climate, habits, goals, and reflections.
@@ -90,7 +95,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             <button
               type="button"
               id="dashboard-open-mood-btn"
-              onClick={onOpenMoodCheckIn}
+              onClick={() => onOpenMoodCheckIn()}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:border-amber-400 text-stone-800 dark:text-stone-200 text-xs font-semibold transition-colors shadow-2xs"
             >
               <SunMedium className="w-4 h-4 text-amber-500" />
@@ -163,7 +168,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             ) : (
               <div className="space-y-2">
                 {habits.slice(0, 4).map((h) => {
-                  const isDone = (h.completedDates || []).includes(todayStr);
+                  const isDone = (h.completedDates || []).some((d) => formatLocalDateKey(d) === todayStr);
                   return (
                     <div
                       key={h.id}

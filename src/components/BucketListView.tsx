@@ -9,7 +9,9 @@ import {
   Calendar, 
   Sparkles, 
   Tag,
-  Check
+  Check,
+  Pin,
+  Clock
 } from 'lucide-react';
 
 interface BucketListViewProps {
@@ -39,6 +41,15 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
     return item.category === activeCategory;
   });
 
+  // Sort pinned dreams first, then newest creation date
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    const aPinned = Boolean(a.isPinned);
+    const bPinned = Boolean(b.isPinned);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+
   const completedCount = items.filter((i) => i.completed).length;
 
   const handleToggleComplete = async (item: BucketItem) => {
@@ -46,6 +57,15 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
       ...item,
       completed: !item.completed,
       completedAt: !item.completed ? new Date().toISOString() : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await onSaveItem(updated);
+  };
+
+  const handleTogglePin = async (item: BucketItem) => {
+    const updated: BucketItem = {
+      ...item,
+      isPinned: !item.isPinned,
       updatedAt: new Date().toISOString(),
     };
     await onSaveItem(updated);
@@ -63,6 +83,7 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
       category: newCategory,
       targetDate: newTargetDate.trim(),
       completed: false,
+      isPinned: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -194,7 +215,7 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
         </div>
 
         {/* Bucket Items Grid */}
-        {filteredItems.length === 0 ? (
+        {sortedItems.length === 0 ? (
           <div className="py-16 text-center rounded-3xl bg-white dark:bg-stone-900 border border-dashed border-stone-200 dark:border-stone-800">
             <Compass className="w-8 h-8 text-stone-300 dark:text-stone-600 mx-auto mb-2" />
             <p className="text-xs text-stone-400 dark:text-stone-500">
@@ -205,14 +226,14 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredItems.map((item) => (
+            {sortedItems.map((item) => (
               <div
                 key={item.id}
                 className={`p-5 rounded-3xl border transition-all flex flex-col justify-between ${
                   item.completed
                     ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/70 dark:border-emerald-900/40'
                     : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 shadow-xs'
-                }`}
+                } ${item.isPinned ? 'ring-1 ring-amber-400/50 border-amber-200/80 dark:border-amber-900/60' : ''}`}
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-2">
@@ -230,14 +251,28 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
                         {item.title}
                       </h3>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteItem(item.id)}
-                      className="p-1 text-stone-300 hover:text-red-500 transition-colors rounded-lg"
-                      title="Delete item"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePin(item)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          item.isPinned
+                            ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60'
+                            : 'text-stone-300 dark:text-stone-600 hover:text-amber-500 hover:bg-stone-100 dark:hover:bg-stone-800'
+                        }`}
+                        title={item.isPinned ? 'Unpin dream' : 'Pin dream to top'}
+                      >
+                        <Pin className={`w-3.5 h-3.5 ${item.isPinned ? 'fill-amber-500 text-amber-500' : ''}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteItem(item.id)}
+                        className="p-1.5 text-stone-300 hover:text-red-500 transition-colors rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800"
+                        title="Delete item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {item.description && (
@@ -247,13 +282,21 @@ export const BucketListView: React.FC<BucketListViewProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-stone-800/60 text-[11px] text-stone-400">
-                  <span className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium">
-                    {item.category}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-stone-100 dark:border-stone-800/60 text-[11px] text-stone-400">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium">
+                      {item.category}
+                    </span>
+                    {item.createdAt && (
+                      <span className="flex items-center gap-1 text-stone-400 dark:text-stone-500">
+                        <Clock className="w-3 h-3 text-stone-400" />
+                        <span>Created {new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      </span>
+                    )}
+                  </div>
                   {item.targetDate && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
+                    <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400 font-medium">
+                      <Calendar className="w-3 h-3 text-amber-500" />
                       <span>{item.targetDate}</span>
                     </span>
                   )}

@@ -8,7 +8,9 @@ import {
   AlertTriangle, 
   Sparkles, 
   CheckCircle2, 
-  CalendarDays 
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface HabitTrackerViewProps {
@@ -18,23 +20,30 @@ interface HabitTrackerViewProps {
   userId: string;
 }
 
+// Format Date object to local YYYY-MM-DD
+export function formatDateKey(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Check if habit has 3 consecutive fails (today, yesterday, 2 days ago not completed)
 export function getHabitFailureAlerts(habits: Habit[]): { habit: Habit; missedDays: number }[] {
   const alerts: { habit: Habit; missedDays: number }[] = [];
   const today = new Date();
 
-  // Create date keys for the last 3 days
-  const last3Days: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
-    last3Days.push(d.toISOString().slice(0, 10));
-  }
-
   habits.forEach((habit) => {
     const completedSet = new Set(habit.completedDates || []);
     // Check how many of the last 3 days were missed
-    const all3Missed = last3Days.every((dateStr) => !completedSet.has(dateStr));
+    const all3Missed = [0, 1, 2].every((i) => {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const localKey = formatDateKey(d);
+      const isoKey = d.toISOString().slice(0, 10);
+      return !completedSet.has(localKey) && !completedSet.has(isoKey);
+    });
+
     if (all3Missed) {
       alerts.push({ habit, missedDays: 3 });
     }
@@ -50,20 +59,27 @@ function calculateStreak(completedDates: string[]): number {
   const today = new Date();
   let streak = 0;
 
-  // Check today or yesterday as start
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayKey = formatDateKey(today);
+  const todayIso = today.toISOString().slice(0, 10);
+
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayKey = formatDateKey(yesterday);
+  const yesterdayIso = yesterday.toISOString().slice(0, 10);
 
-  let currentCheck = set.has(todayStr) ? today : (set.has(yesterdayStr) ? yesterday : null);
+  const hasToday = set.has(todayKey) || set.has(todayIso);
+  const hasYesterday = set.has(yesterdayKey) || set.has(yesterdayIso);
+
+  let currentCheck = hasToday ? today : (hasYesterday ? yesterday : null);
   if (!currentCheck) return 0;
 
+  const checkDate = new Date(currentCheck);
   while (true) {
-    const checkStr = currentCheck.toISOString().slice(0, 10);
-    if (set.has(checkStr)) {
+    const localKey = formatDateKey(checkDate);
+    const isoKey = checkDate.toISOString().slice(0, 10);
+    if (set.has(localKey) || set.has(isoKey)) {
       streak++;
-      currentCheck.setDate(currentCheck.getDate() - 1);
+      checkDate.setDate(checkDate.getDate() - 1);
     } else {
       break;
     }
@@ -81,28 +97,63 @@ export const HabitTrackerView: React.FC<HabitTrackerViewProps> = ({
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitCategory, setNewHabitCategory] = useState('Mindfulness');
   const [isAdding, setIsAdding] = useState(false);
+  const [weekOffset, setWeekOffset] = useState<number>(0);
 
-  // Generate last 7 days for the weekly grid
+  // Generate the 7 days of the week starting from Sunday through Saturday
   const today = new Date();
-  const weekDays: { dateStr: string; label: string; dayNum: number; isToday: boolean }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(today.getDate() - i);
+  const currentDayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+  
+  // Calculate Sunday of the selected week (adjusted by weekOffset)
+  const baseSunday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - currentDayOfWeek + (weekOffset * 7),
+    12, 0, 0
+  );
+
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const todayKey = formatDateKey(today);
+
+  interface WeekDayItem {
+    dateStr: string;
+    isoStr: string;
+    label: string;
+    dayNum: number;
+    isToday: boolean;
+    fullDateLabel: string;
+  }
+
+  const weekDays: WeekDayItem[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(baseSunday);
+    d.setDate(baseSunday.getDate() + i);
+    const dateStr = formatDateKey(d);
+    const isoStr = d.toISOString().slice(0, 10);
+    const isToday = dateStr === todayKey;
+
     weekDays.push({
-      dateStr: d.toISOString().slice(0, 10),
-      label: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      dateStr,
+      isoStr,
+      label: DAY_LABELS[i],
       dayNum: d.getDate(),
-      isToday: i === 0,
+      isToday,
+      fullDateLabel: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
     });
   }
 
+  // Week range string for display
+  const weekStartFormatted = new Date(baseSunday).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const endSaturday = new Date(baseSunday);
+  endSaturday.setDate(baseSunday.getDate() + 6);
+  const weekEndFormatted = endSaturday.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
   const failureAlerts = getHabitFailureAlerts(habits);
 
-  const handleToggleHabitDay = async (habit: Habit, dateStr: string) => {
+  const handleToggleHabitDay = async (habit: Habit, dateStr: string, isoStr?: string) => {
     const currentDates = habit.completedDates || [];
-    const exists = currentDates.includes(dateStr);
+    const exists = currentDates.includes(dateStr) || (isoStr ? currentDates.includes(isoStr) : false);
     const updatedDates = exists
-      ? currentDates.filter((d) => d !== dateStr)
+      ? currentDates.filter((d) => d !== dateStr && d !== isoStr)
       : [...currentDates, dateStr];
 
     const updatedHabit: Habit = {
@@ -252,15 +303,55 @@ export const HabitTrackerView: React.FC<HabitTrackerViewProps> = ({
 
         {/* Habits List */}
         <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 sm:p-7 border border-stone-200 dark:border-stone-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800/60">
-            <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-              Active Habits ({habits.length})
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800/60">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                Active Habits ({habits.length})
+              </span>
+              <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800/80 px-2.5 py-1 rounded-xl text-xs text-stone-600 dark:text-stone-300">
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset((prev) => prev - 1)}
+                  className="p-0.5 hover:text-stone-900 dark:hover:text-white rounded transition-colors"
+                  title="Previous week"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-medium px-1">
+                  {weekStartFormatted} – {weekEndFormatted}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset((prev) => prev + 1)}
+                  className="p-0.5 hover:text-stone-900 dark:hover:text-white rounded transition-colors"
+                  title="Next week"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                {weekOffset !== 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setWeekOffset(0)}
+                    className="ml-1 text-[10px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                  >
+                    Current
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center gap-1 sm:gap-2">
               {weekDays.map((day) => (
-                <div key={day.dateStr} className="w-8 sm:w-10 text-center">
-                  <span className="block text-[10px] text-stone-400 font-semibold">{day.label}</span>
-                  <span className={`block text-xs font-bold ${day.isToday ? 'text-amber-600 dark:text-amber-400' : 'text-stone-700 dark:text-stone-300'}`}>
+                <div 
+                  key={day.dateStr} 
+                  className={`w-8 sm:w-10 text-center py-1 rounded-lg transition-colors ${
+                    day.isToday ? 'bg-amber-50 dark:bg-amber-950/50 ring-1 ring-amber-400/60 dark:ring-amber-500/40' : ''
+                  }`}
+                >
+                  <span className={`block text-[10px] font-semibold ${day.isToday ? 'text-amber-700 dark:text-amber-400' : 'text-stone-400'}`}>
+                    {day.label}
+                  </span>
+                  <span className={`block text-xs font-bold ${day.isToday ? 'text-amber-800 dark:text-amber-300' : 'text-stone-700 dark:text-stone-300'}`}>
                     {day.dayNum}
                   </span>
                 </div>
@@ -268,6 +359,7 @@ export const HabitTrackerView: React.FC<HabitTrackerViewProps> = ({
               <div className="w-8 sm:w-12 text-center">
                 <span className="text-[10px] text-stone-400 font-semibold">Streak</span>
               </div>
+              <div className="w-6 sm:w-7" />
             </div>
           </div>
 
@@ -296,18 +388,20 @@ export const HabitTrackerView: React.FC<HabitTrackerViewProps> = ({
 
                     <div className="flex items-center gap-1 sm:gap-2">
                       {weekDays.map((day) => {
-                        const isDone = completedDates.has(day.dateStr);
+                        const isDone = completedDates.has(day.dateStr) || (day.isoStr ? completedDates.has(day.isoStr) : false);
                         return (
                           <button
                             key={day.dateStr}
                             type="button"
-                            onClick={() => handleToggleHabitDay(habit, day.dateStr)}
+                            onClick={() => handleToggleHabitDay(habit, day.dateStr, day.isoStr)}
                             className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all ${
                               isDone
                                 ? 'bg-amber-500 text-white shadow-2xs'
-                                : 'bg-stone-50 dark:bg-stone-800/60 text-stone-300 dark:text-stone-600 hover:border-amber-400 border border-stone-200/60 dark:border-stone-800'
+                                : day.isToday
+                                  ? 'bg-amber-50/70 dark:bg-amber-950/20 text-stone-300 dark:text-stone-600 hover:border-amber-400 border border-amber-300/60 dark:border-amber-700/60'
+                                  : 'bg-stone-50 dark:bg-stone-800/60 text-stone-300 dark:text-stone-600 hover:border-amber-400 border border-stone-200/60 dark:border-stone-800'
                             }`}
-                            title={`${habit.name} on ${day.dateStr}: ${isDone ? 'Completed' : 'Click to complete'}`}
+                            title={`${habit.name} on ${day.fullDateLabel}: ${isDone ? 'Completed' : 'Click to complete'}`}
                           >
                             {isDone && <Check className="w-4 h-4 stroke-[3]" />}
                           </button>
@@ -324,7 +418,7 @@ export const HabitTrackerView: React.FC<HabitTrackerViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteHabit(habit.id)}
-                        className="p-1.5 text-stone-300 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-stone-300 hover:text-red-500 transition-colors w-6 sm:w-7 flex items-center justify-center"
                         title="Delete habit"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
